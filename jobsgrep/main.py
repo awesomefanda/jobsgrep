@@ -69,8 +69,12 @@ class _RequestLogMiddleware(BaseHTTPMiddleware):
 _tasks: dict[str, SearchTask] = {}
 _task_lock = asyncio.Lock()
 
-# Temp dir for generated Excel files
-_REPORTS_DIR = Path.home() / ".jobsgrep" / "reports"
+# Temp dir for generated Excel files — use /tmp on Vercel, home dir otherwise
+import os as _os
+_REPORTS_DIR = (
+    Path("/tmp/jobsgrep/reports") if _os.environ.get("VERCEL")
+    else Path.home() / ".jobsgrep" / "reports"
+)
 
 
 def _load_seed_cache() -> None:
@@ -108,22 +112,32 @@ def _load_seed_cache() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        _REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+
     settings = get_settings()
 
     # Configure logging based on mode
-    log_dir = settings.data_dir / "logs"
-    setup_logging(
-        mode=settings.jobsgrep_mode.value,
-        log_dir=log_dir,
-        log_level=settings.log_level,
-    )
+    try:
+        log_dir = settings.data_dir / "logs"
+        setup_logging(
+            mode=settings.jobsgrep_mode.value,
+            log_dir=log_dir,
+            log_level=settings.log_level,
+        )
+    except Exception:
+        pass  # logging failures must not prevent startup
 
     logger.info("JobsGrep starting in %s mode on %s:%s",
                 settings.jobsgrep_mode.value, settings.host, settings.port)
 
     # Load bundled seed data into cache (Vercel cold start or any empty cache)
-    _load_seed_cache()
+    try:
+        _load_seed_cache()
+    except Exception as e:
+        logger.warning("seed load failed: %s", e)
 
     # Start background prefetch in non-Vercel server modes
     import os as _os
