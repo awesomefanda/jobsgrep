@@ -27,6 +27,12 @@ SEED_QUERIES = [
     "Software Engineer Austin Texas",
     "Backend Engineer remote",
     "Machine Learning Engineer remote",
+    "Engineering Manager remote",
+    "Engineering Manager San Francisco Bay Area",
+    "Senior Engineering Manager remote",
+    "Director of Engineering remote",
+    "Director of Engineering San Francisco Bay Area",
+    "Senior Director of Engineering remote",
 ]
 
 
