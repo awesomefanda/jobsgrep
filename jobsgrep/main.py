@@ -94,16 +94,28 @@ def _load_seed_cache() -> None:
     raw    = _cache_dir()
 
     seeded = 0
+    now = time.time()
     for src in seed_dir.glob("scored__*.json"):
         dst = scored / src.name.replace("scored__", "")
         if not dst.exists():
-            shutil.copy(src, dst)
+            # Re-stamp stored_at to now so TTL check treats seeds as fresh
+            try:
+                data = json.loads(src.read_text(encoding="utf-8"))
+                data["stored_at"] = now
+                dst.write_text(json.dumps(data), encoding="utf-8")
+            except Exception:
+                shutil.copy(src, dst)
             seeded += 1
 
     for src in seed_dir.glob("raw__*.json"):
         dst = raw / src.name.replace("raw__", "")
         if not dst.exists():
-            shutil.copy(src, dst)
+            try:
+                data = json.loads(src.read_text(encoding="utf-8"))
+                data["stored_at"] = now
+                dst.write_text(json.dumps(data), encoding="utf-8")
+            except Exception:
+                shutil.copy(src, dst)
             seeded += 1
 
     if seeded:
