@@ -206,6 +206,17 @@ if _FRONTEND_DIR.exists():
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
+def _compute_hot_skills(scored_jobs: list, top_n: int = 15) -> list[tuple[str, int]]:
+    """Count skill mentions across all scored jobs (matching + missing) and return top N."""
+    from collections import Counter
+    counts: Counter = Counter()
+    for sj in scored_jobs:
+        for skill in sj.score.matching_skills + sj.score.missing_skills:
+            if skill.strip():
+                counts[skill.strip()] += 1
+    return counts.most_common(top_n)
+
+
 def _task_response(task: SearchTask) -> StatusResponse:
     return StatusResponse(
         task_id=task.task_id,
@@ -217,6 +228,7 @@ def _task_response(task: SearchTask) -> StatusResponse:
         error=task.error,
         sources_searched=task.sources_searched,
         jobs_per_source=task.jobs_per_source,
+        hot_skills=task.hot_skills,
     )
 
 
@@ -266,6 +278,7 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
             task.sources_searched = ["scored_cache"]
             task.jobs_per_source = {"scored_cache": len(pre_scored)}
 
+            task.hot_skills = _compute_hot_skills(pre_scored)
             await update(TaskStatus.REPORTING, "Building report from pre-scored results...")
             task.completed_at = datetime.now(timezone.utc)
             from .report.excel import generate_report
@@ -295,6 +308,7 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
 
             scored = await score_jobs(cached_jobs, parsed, progress_cb=progress_cb_cached)
             task.total_jobs_scored = len(scored)
+            task.hot_skills = _compute_hot_skills(scored)
 
             # Persist scored results so next hit is instant
             from .job_cache import store_scored as _store_scored
@@ -394,6 +408,7 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
 
         scored = await score_jobs(all_jobs, parsed, progress_cb=progress_cb)
         task.total_jobs_scored = len(scored)
+        task.hot_skills = _compute_hot_skills(scored)
 
         # Cache scored results so next user with same query gets instant results
         if scored:

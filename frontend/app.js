@@ -17,6 +17,8 @@
   const resultsSummary = $('results-summary');
   const jobsBody       = $('jobs-body');
   const downloadBtn    = $('download-btn');
+  const hotSkillsPanel = $('hot-skills-panel');
+  const hotSkillsList  = $('hot-skills-list');
   const toast          = $('toast');
 
   const historyPanel = $('history-panel');
@@ -244,11 +246,27 @@
       downloadBtn.style.display = 'inline-flex';
     }
 
+    // Hot skills
+    if (data.hot_skills && data.hot_skills.length) {
+      renderHotSkills(data.hot_skills);
+    }
+
     // Preview top 10
     try {
       // We don't have a preview endpoint yet — show a placeholder
       renderPreview(data);
     } catch (_) {}
+  }
+
+  function renderHotSkills(skills) {
+    // skills = [[name, count], ...]
+    const max = skills[0][1] || 1;
+    hotSkillsList.innerHTML = skills.map(([skill, count]) => {
+      const pct = Math.round((count / max) * 100);
+      return `<span class="skill-chip" title="${count} job${count !== 1 ? 's' : ''}"
+                style="--bar:${pct}%">${escHtml(skill)}<em>${count}</em></span>`;
+    }).join('');
+    hotSkillsPanel.style.display = 'block';
   }
 
   function renderPreview(data) {

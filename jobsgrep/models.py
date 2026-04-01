@@ -113,6 +113,7 @@ class SearchTask(BaseModel):
     completed_at: datetime | None = None
     sources_searched: list[str] = Field(default_factory=list)
     jobs_per_source: dict[str, int] = Field(default_factory=dict)
+    hot_skills: list[tuple[str, int]] = Field(default_factory=list)  # [(skill, count), ...]
 
 
 # ─── API request/response ─────────────────────────────────────────────────────
@@ -138,6 +139,7 @@ class StatusResponse(BaseModel):
     error: str | None = None
     sources_searched: list[str] = Field(default_factory=list)
     jobs_per_source: dict[str, int] = Field(default_factory=dict)
+    hot_skills: list[tuple[str, int]] = Field(default_factory=list)
 
 
 class SourceInfo(BaseModel):

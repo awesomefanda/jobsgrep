@@ -399,3 +399,25 @@ footer a { color: var(--muted); }
   max-width: 400px;
   z-index: 999;
 }
+
+/* ─── Hot skills chips ────────────────────────────────────────────────── */
+.skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.6rem;
+  background: linear-gradient(90deg, #1e3a5f calc(var(--bar, 50%)), #1a1d2e calc(var(--bar, 50%)));
+  border: 1px solid #2a3a5a;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  color: #c8d8f0;
+  cursor: default;
+  transition: border-color 0.15s;
+}
+.skill-chip:hover { border-color: #4a7abf; }
+.skill-chip em {
+  font-style: normal;
+  font-size: 0.7rem;
+  color: #7a9abf;
+  font-weight: 600;
+}
