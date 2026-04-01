@@ -238,14 +238,8 @@
     resultsSummary.textContent =
       `Found ${data.scored_jobs} matching jobs from ${data.total_jobs} total`;
 
-    // Download button — prefer embedded base64 (Vercel cross-instance safe)
-    if (data.report_b64) {
-      const bytes = Uint8Array.from(atob(data.report_b64), c => c.charCodeAt(0));
-      const blob = new Blob([bytes], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-      downloadBtn.href = URL.createObjectURL(blob);
-      downloadBtn.download = data.report_filename || 'jobsgrep_report.xlsx';
-      downloadBtn.style.display = 'inline-flex';
-    } else if (data.download_url) {
+    // Download button
+    if (data.download_url) {
       downloadBtn.href = data.download_url;
       downloadBtn.style.display = 'inline-flex';
     }

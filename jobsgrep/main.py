@@ -494,21 +494,15 @@ async def stream_progress(task_id: str, request: Request,
                 }
             if task.status in (TaskStatus.COMPLETE, TaskStatus.FAILED):
                 done_data = _task_response(task).model_dump()
-                # On Vercel, embed the report file as base64 so the browser can
-                # download it directly without a cross-instance filesystem lookup.
+                # On Vercel, pass the query in the download URL so the download
+                # endpoint can regenerate the report on any instance from the
+                # scored cache (seeds are loaded at startup on every cold start).
                 import os as _os
-                if _os.environ.get("VERCEL"):
-                    report_path = getattr(task, "_report_path", None)
-                    if report_path and Path(report_path).exists():
-                        import base64
-                        done_data["report_b64"] = base64.b64encode(
-                            Path(report_path).read_bytes()
-                        ).decode()
-                        done_data["report_filename"] = Path(report_path).name
-                        try:
-                            Path(report_path).unlink()
-                        except OSError:
-                            pass
+                if _os.environ.get("VERCEL") and task.query:
+                    from urllib.parse import quote
+                    done_data["download_url"] = (
+                        f"/api/download/{task_id}?query={quote(task.query)}"
+                    )
                 import json as _json
                 yield {"event": "done", "data": _json.dumps(done_data)}
                 break
@@ -518,22 +512,47 @@ async def stream_progress(task_id: str, request: Request,
 
 
 @app.get("/api/download/{task_id}")
-async def download_report(task_id: str, user: AuthDep):
-    """Download the Excel report."""
-    # Try in-memory task first (local / same-instance)
+async def download_report(task_id: str, user: AuthDep, query: str = ""):
+    """Download the Excel report.
+
+    On Vercel, /tmp is per-instance so a different instance won't find the file.
+    The download URL includes ?query=... so this endpoint can regenerate the
+    report from the scored cache (seeds are loaded at every cold start).
+    """
     report_path: str | None = None
+
+    # 1. Try in-memory task (local dev / same Vercel instance)
     task = _tasks.get(task_id)
     if task:
         if task.status != TaskStatus.COMPLETE:
             raise HTTPException(status_code=409, detail=f"Task not complete (status: {task.status.value})")
         report_path = getattr(task, "_report_path", None)
 
-    # Fallback: scan filesystem for report with this task_id in filename
-    # (handles Vercel cross-instance case where download hits a cold instance)
+    # 2. Try filesystem scan (same instance, different task object)
     if not report_path or not Path(report_path).exists():
         matches = list(_REPORTS_DIR.glob(f"*_{task_id}.xlsx"))
         if matches:
             report_path = str(sorted(matches)[-1])
+
+    # 3. Vercel cross-instance fallback: regenerate from scored cache using query
+    if (not report_path or not Path(report_path).exists()) and query:
+        try:
+            from .nlp.parser import parse_query
+            from .job_cache import get_scored_fuzzy
+            from .report.excel import generate_report
+            parsed = await parse_query(query, None)
+            scored = get_scored_fuzzy(parsed)
+            if scored:
+                fake_task = SearchTask(task_id=task_id, query=query)
+                fake_task.status = TaskStatus.COMPLETE
+                fake_task.total_jobs_found = len(scored)
+                fake_task.total_jobs_scored = len(scored)
+                fake_task.sources_searched = ["scored_cache"]
+                _REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+                rp = generate_report(scored, fake_task, _REPORTS_DIR)
+                report_path = str(rp)
+        except Exception as e:
+            logger.warning("report regeneration failed: %s", e)
 
     if not report_path or not Path(report_path).exists():
         raise HTTPException(status_code=404, detail="Report file not found")
