@@ -324,13 +324,18 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
             except Exception:
                 pass
 
+        SOURCE_TIMEOUT = 90  # seconds per source
+
         async def run_source(name: str, source) -> tuple[str, list]:
             if name not in enabled:
                 return name, []
             try:
                 task.progress_message = f"Searching {name}..."
-                jobs = await source.fetch_jobs(parsed)
+                jobs = await asyncio.wait_for(source.fetch_jobs(parsed), timeout=SOURCE_TIMEOUT)
                 return name, jobs
+            except asyncio.TimeoutError:
+                logger.warning("source %s timed out after %ds", name, SOURCE_TIMEOUT)
+                return name, []
             except Exception as e:
                 logger.warning("source %s failed: %s", name, e)
                 return name, []
