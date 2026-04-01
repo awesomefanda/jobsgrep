@@ -249,10 +249,6 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
 
     try:
         # Phase 0: parse query
-        await update(TaskStatus.PARSING, "Parsing your query...")
-        parsed = await parse_query(query, resume_text)
-        task.parsed_query = parsed
-
         from .job_cache import (
             cache_key as _cache_key,
             get as _cache_get,
@@ -260,11 +256,28 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
             get_scored as _get_scored,
             get_scored_fuzzy as _get_scored_fuzzy,
         )
-        _ck = _cache_key(parsed)
+        from .nlp.parser import _fallback_parse
+
+        # ── Fast path: try regex parser first, check scored cache ────────────
+        # Avoids LLM call (~1-3s) for queries that hit the seed cache.
+        fast_parsed = _fallback_parse(query)
+        cache_result = _get_scored_fuzzy(fast_parsed)
+
+        if cache_result is None:
+            # Cache miss with fallback — now run the full LLM parser for better accuracy
+            await update(TaskStatus.PARSING, "Parsing your query...")
+            parsed = await parse_query(query, resume_text)
+            task.parsed_query = parsed
+            _ck = _cache_key(parsed)
+            cache_result = _get_scored_fuzzy(parsed)
+        else:
+            # Cache hit without LLM — use fast_parsed directly
+            parsed = fast_parsed
+            task.parsed_query = parsed
+            _ck = _cache_key(parsed)
 
         # ── Phase 1a: scored cache hit → skip sources AND LLM entirely ──────
         # Try exact key first, then fuzzy title-overlap match against seed files.
-        cache_result = _get_scored_fuzzy(parsed)
         if cache_result is not None:
             pre_scored, hot_skills = cache_result
             logger.info("scored cache hit for task %s: %d jobs", task_id, len(pre_scored))
