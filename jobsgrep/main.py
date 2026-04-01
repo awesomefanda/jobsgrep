@@ -493,18 +493,16 @@ async def stream_progress(task_id: str, request: Request,
                     ),
                 }
             if task.status in (TaskStatus.COMPLETE, TaskStatus.FAILED):
-                done_data = _task_response(task).model_dump()
-                # On Vercel, pass the query in the download URL so the download
-                # endpoint can regenerate the report on any instance from the
-                # scored cache (seeds are loaded at startup on every cold start).
+                resp = _task_response(task)
+                # On Vercel, append ?query=... to the download URL so the
+                # download endpoint can regenerate the report on any instance.
                 import os as _os
-                if _os.environ.get("VERCEL") and task.query:
+                if _os.environ.get("VERCEL") and task.query and resp.download_url:
                     from urllib.parse import quote
-                    done_data["download_url"] = (
-                        f"/api/download/{task_id}?query={quote(task.query)}"
+                    resp.download_url = (
+                        f"{resp.download_url}?query={quote(task.query)}"
                     )
-                import json as _json
-                yield {"event": "done", "data": _json.dumps(done_data)}
+                yield {"event": "done", "data": resp.model_dump_json()}
                 break
             await asyncio.sleep(1)
 
