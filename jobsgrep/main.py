@@ -206,16 +206,6 @@ if _FRONTEND_DIR.exists():
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
-def _compute_hot_skills(scored_jobs: list, top_n: int = 15) -> list[dict]:
-    """Count skill mentions across all scored jobs (matching + missing) and return top N."""
-    from collections import Counter
-    counts: Counter = Counter()
-    for sj in scored_jobs:
-        for skill in sj.score.matching_skills + sj.score.missing_skills:
-            if skill.strip():
-                counts[skill.strip()] += 1
-    return [{"skill": s, "count": c} for s, c in counts.most_common(top_n)]
-
 
 def _task_response(task: SearchTask) -> StatusResponse:
     return StatusResponse(
@@ -270,15 +260,15 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
 
         # ── Phase 1a: scored cache hit → skip sources AND LLM entirely ──────
         # Try exact key first, then fuzzy title-overlap match against seed files.
-        pre_scored = _get_scored_fuzzy(parsed)
-        if pre_scored is not None:
+        cache_result = _get_scored_fuzzy(parsed)
+        if cache_result is not None:
+            pre_scored, hot_skills = cache_result
             logger.info("scored cache hit for task %s: %d jobs", task_id, len(pre_scored))
             task.total_jobs_found = len(pre_scored)
             task.total_jobs_scored = len(pre_scored)
             task.sources_searched = ["scored_cache"]
             task.jobs_per_source = {"scored_cache": len(pre_scored)}
-
-            task.hot_skills = _compute_hot_skills(pre_scored)
+            task.hot_skills = hot_skills
             await update(TaskStatus.REPORTING, "Building report from pre-scored results...")
             task.completed_at = datetime.now(timezone.utc)
             from .report.excel import generate_report
@@ -308,12 +298,12 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
 
             scored = await score_jobs(cached_jobs, parsed, progress_cb=progress_cb_cached)
             task.total_jobs_scored = len(scored)
-            task.hot_skills = _compute_hot_skills(scored)
 
-            # Persist scored results so next hit is instant
-            from .job_cache import store_scored as _store_scored
+            # Persist scored results (store_scored precomputes hot_skills)
+            from .job_cache import store_scored as _store_scored, _compute_hot_skills_from_jobs
             if scored:
                 _store_scored(_ck, scored, source="live_search", label=query)
+            task.hot_skills = _compute_hot_skills_from_jobs(scored)
 
             await update(TaskStatus.REPORTING, "Generating Excel report...")
             task.completed_at = datetime.now(timezone.utc)
@@ -408,12 +398,12 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
 
         scored = await score_jobs(all_jobs, parsed, progress_cb=progress_cb)
         task.total_jobs_scored = len(scored)
-        task.hot_skills = _compute_hot_skills(scored)
 
-        # Cache scored results so next user with same query gets instant results
+        # Cache scored results (store_scored precomputes hot_skills)
+        from .job_cache import store_scored as _store_scored, _compute_hot_skills_from_jobs
         if scored:
-            from .job_cache import store_scored as _store_scored
             _store_scored(_ck, scored, source="live_search", label=query)
+        task.hot_skills = _compute_hot_skills_from_jobs(scored)
 
         # Phase 3: generate report
         await update(TaskStatus.REPORTING, "Generating Excel report...")

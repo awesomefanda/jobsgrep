@@ -178,10 +178,9 @@ def evict_expired() -> int:
 
 # ─── Scored results cache ────────────────────────────────────────────────────
 
-def get_scored(key: str) -> "list | None":
-    """Return pre-scored ScoredJob list if cached and fresh, else None."""
+def get_scored(key: str) -> "tuple[list, list] | None":
+    """Return (jobs, hot_skills) if cached and fresh, else None."""
     from .config import get_settings
-    from .models import RawJob, JobScore, ScoredJob
     ttl = get_settings().effective_scored_cache_ttl
     if ttl == 0:
         return None
@@ -190,7 +189,7 @@ def get_scored(key: str) -> "list | None":
         entry = _scored_mem[key]
         if time.time() - entry["stored_at"] < ttl:
             logger.debug("scored cache hit (memory): %s (%d jobs)", key, entry["job_count"])
-            return _deserialize_scored(entry["jobs"])
+            return _deserialize_scored(entry["jobs"]), entry.get("hot_skills", [])
         del _scored_mem[key]
 
     path = _scored_dir() / f"{key}.json"
@@ -209,20 +208,16 @@ def get_scored(key: str) -> "list | None":
         _scored_mem[key] = entry
         logger.info("scored cache hit (disk): %s — %d jobs, %.0fh old, source=%s",
                     key, len(jobs), age / 3600, entry.get("source", "?"))
-        return jobs
+        return jobs, entry.get("hot_skills", [])
     except Exception as e:
         logger.warning("scored cache read error for %s: %s", key, e)
         return None
 
 
-def get_scored_fuzzy(query: "ParsedQuery") -> "list | None":
+def get_scored_fuzzy(query: "ParsedQuery") -> "tuple[list, list] | None":
     """Fuzzy scored-cache lookup: try exact key first, then title-overlap scan.
 
-    Handles two cases where exact key would miss:
-      1. User writes "software manager remote" but seed is "Engineering Manager remote"
-      2. Slight location phrasing differences ("Bay Area" vs "San Francisco Bay Area")
-
-    Returns the best-matching cached result, or None if nothing close enough.
+    Returns (jobs, hot_skills) tuple, or None if nothing close enough.
     """
     import re as _re
 
@@ -310,19 +305,31 @@ def get_scored_fuzzy(query: "ParsedQuery") -> "list | None":
     return None
 
 
+def _compute_hot_skills_from_jobs(jobs: "list", top_n: int = 15) -> "list[dict]":
+    """Compute top skills from a list of ScoredJob objects."""
+    from collections import Counter
+    counts: Counter = Counter()
+    for sj in jobs:
+        for skill in sj.score.matching_skills + sj.score.missing_skills:
+            if skill.strip():
+                counts[skill.strip()] += 1
+    return [{"skill": s, "count": c} for s, c in counts.most_common(top_n)]
+
+
 def store_scored(key: str, jobs: "list", source: str = "prefetch", label: str = "") -> None:
-    """Write ScoredJob list to scored cache (memory + disk)."""
+    """Write ScoredJob list to scored cache (memory + disk), with precomputed hot_skills."""
     from .config import get_settings
     if get_settings().effective_scored_cache_ttl == 0:
         return
 
     entry: dict[str, Any] = {
-        "key":       key,
-        "label":     label,
-        "source":    source,
-        "stored_at": time.time(),
-        "job_count": len(jobs),
-        "jobs":      [{"job": j.job.model_dump(), "score": j.score.model_dump()} for j in jobs],
+        "key":        key,
+        "label":      label,
+        "source":     source,
+        "stored_at":  time.time(),
+        "job_count":  len(jobs),
+        "hot_skills": _compute_hot_skills_from_jobs(jobs),
+        "jobs":       [{"job": j.job.model_dump(), "score": j.score.model_dump()} for j in jobs],
     }
     _scored_mem[key] = entry
     try:
