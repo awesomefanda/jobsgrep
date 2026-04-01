@@ -493,7 +493,24 @@ async def stream_progress(task_id: str, request: Request,
                     ),
                 }
             if task.status in (TaskStatus.COMPLETE, TaskStatus.FAILED):
-                yield {"event": "done", "data": _task_response(task).model_dump_json()}
+                done_data = _task_response(task).model_dump()
+                # On Vercel, embed the report file as base64 so the browser can
+                # download it directly without a cross-instance filesystem lookup.
+                import os as _os
+                if _os.environ.get("VERCEL"):
+                    report_path = getattr(task, "_report_path", None)
+                    if report_path and Path(report_path).exists():
+                        import base64
+                        done_data["report_b64"] = base64.b64encode(
+                            Path(report_path).read_bytes()
+                        ).decode()
+                        done_data["report_filename"] = Path(report_path).name
+                        try:
+                            Path(report_path).unlink()
+                        except OSError:
+                            pass
+                import json as _json
+                yield {"event": "done", "data": _json.dumps(done_data)}
                 break
             await asyncio.sleep(1)
 
