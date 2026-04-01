@@ -597,38 +597,25 @@ async def list_sources(user: AuthDep):
 
 @app.get("/api/trending-skills")
 async def trending_skills():
-    """Aggregate hot_skills from seed files + scored cache for the landing page.
+    """Return trending skills for the landing page.
 
-    Always reads from bundled data/seed/ first (guaranteed present on Vercel),
-    then supplements with anything in the live scored cache.
+    Uses precomputed constant from seed_skills.py (always bundled),
+    supplemented by any live scored cache entries with hot_skills.
     """
+    from .seed_skills import TRENDING_SKILLS
     from collections import Counter
     from .job_cache import _scored_dir
-    counts: Counter = Counter()
 
-    # Primary: bundled seed files (always present in deployment bundle)
-    seed_dir = Path(__file__).parent.parent / "data" / "seed"
-    dirs_to_scan = [seed_dir] if seed_dir.exists() else []
+    counts: Counter = Counter({item["skill"]: item["count"] for item in TRENDING_SKILLS})
 
-    # Also include live scored cache (may be empty on cold start)
-    scored = _scored_dir()
-    if scored.exists():
-        dirs_to_scan.append(scored)
-
-    seen_keys: set[str] = set()
-    for directory in dirs_to_scan:
-        for path in directory.glob("*.json"):
-            # Deduplicate: scored cache and seed may overlap after seed load
-            stem = path.stem.replace("scored__", "")
-            if stem in seen_keys:
-                continue
-            seen_keys.add(stem)
-            try:
-                entry = json.loads(path.read_text(encoding="utf-8"))
-                for item in entry.get("hot_skills", []):
-                    counts[item["skill"]] += item["count"]
-            except Exception:
-                continue
+    # Supplement with live scored cache (may have new searches cached)
+    try:
+        for path in _scored_dir().glob("*.json"):
+            entry = json.loads(path.read_text(encoding="utf-8"))
+            for item in entry.get("hot_skills", []):
+                counts[item["skill"]] += item["count"]
+    except Exception:
+        pass
 
     return [{"skill": s, "count": c} for s, c in counts.most_common(20)]
 
