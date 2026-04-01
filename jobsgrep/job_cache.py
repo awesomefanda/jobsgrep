@@ -259,16 +259,27 @@ def get_scored_fuzzy(query: "ParsedQuery") -> "list | None":
                 continue
 
             label_words = _words(label)
+
+            # Location guard: if the user asked for a specific city/region,
+            # only match seeds for the SAME location.  Returning SF Bay Area
+            # jobs for an Austin query gives wrong results.
+            NON_LOC = _words("remote")
+            seed_loc_words = label_words - query_title_words - NON_LOC
+            if query_loc_words - NON_LOC:
+                # User specified a non-remote location — require meaningful overlap
+                loc_overlap = len(query_loc_words & label_words)
+                if loc_overlap == 0:
+                    continue  # different city/region → skip
+            else:
+                loc_overlap = 1  # remote-only query: location is irrelevant
+
             title_overlap = len(query_title_words & label_words)
-            loc_overlap = len(query_loc_words & label_words) if query_loc_words else 1
 
             # Penalize if the seed has words the query clearly lacks
-            # (e.g. query is "manager", seed has "engineer" but not "manager" → bad match)
-            seed_title_only = label_words - _words("remote san francisco bay area california new york")
+            seed_title_only = label_words - _words("remote san francisco bay area california new york austin texas")
             false_match_penalty = len(seed_title_only - query_title_words) * 0.5
 
-            # At least one title word must overlap (e.g. "manager" matches both
-            # "Engineering Manager" and "Software Manager")
+            # At least one title word must overlap
             if title_overlap >= 1:
                 score = title_overlap * 3 + loc_overlap - false_match_penalty
                 if score > best_score:
