@@ -85,7 +85,11 @@ def _load_seed_cache() -> None:
     On non-Vercel deployments it also seeds an empty cache on first run.
     """
     import shutil
-    seed_dir = Path(__file__).parent.parent / "data" / "seed"
+    # Prefer jobsgrep/seed_data/ (always bundled by @vercel/python as part of the package).
+    # Fall back to data/seed/ for local development.
+    pkg_seed = Path(__file__).parent / "seed_data"
+    legacy_seed = Path(__file__).parent.parent / "data" / "seed"
+    seed_dir = pkg_seed if pkg_seed.exists() else legacy_seed
     if not seed_dir.exists():
         return
 
