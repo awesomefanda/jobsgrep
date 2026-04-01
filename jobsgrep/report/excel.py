@@ -82,7 +82,8 @@ def generate_report(
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    out_path = output_dir / f"jobsgrep_report_{ts}.xlsx"
+    task_suffix = f"_{task.task_id}" if task.task_id else ""
+    out_path = output_dir / f"jobsgrep_report_{ts}{task_suffix}.xlsx"
 
     wb = Workbook()
     _sheet_tracker(wb, scored_jobs)

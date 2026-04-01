@@ -503,13 +503,21 @@ async def stream_progress(task_id: str, request: Request,
 @app.get("/api/download/{task_id}")
 async def download_report(task_id: str, user: AuthDep):
     """Download the Excel report."""
+    # Try in-memory task first (local / same-instance)
+    report_path: str | None = None
     task = _tasks.get(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    if task.status != TaskStatus.COMPLETE:
-        raise HTTPException(status_code=409, detail=f"Task not complete (status: {task.status.value})")
+    if task:
+        if task.status != TaskStatus.COMPLETE:
+            raise HTTPException(status_code=409, detail=f"Task not complete (status: {task.status.value})")
+        report_path = getattr(task, "_report_path", None)
 
-    report_path = getattr(task, "_report_path", None)
+    # Fallback: scan filesystem for report with this task_id in filename
+    # (handles Vercel cross-instance case where download hits a cold instance)
+    if not report_path or not Path(report_path).exists():
+        matches = list(_REPORTS_DIR.glob(f"*_{task_id}.xlsx"))
+        if matches:
+            report_path = str(sorted(matches)[-1])
+
     if not report_path or not Path(report_path).exists():
         raise HTTPException(status_code=404, detail="Report file not found")
 
