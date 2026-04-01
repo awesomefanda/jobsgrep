@@ -595,6 +595,22 @@ async def list_sources(user: AuthDep):
     ]
 
 
+@app.get("/api/trending-skills")
+async def trending_skills():
+    """Aggregate hot_skills across all scored cache/seed files for the landing page."""
+    from collections import Counter
+    from .job_cache import _scored_dir
+    counts: Counter = Counter()
+    for path in _scored_dir().glob("*.json"):
+        try:
+            entry = json.loads(path.read_text(encoding="utf-8"))
+            for item in entry.get("hot_skills", []):
+                counts[item["skill"]] += item["count"]
+        except Exception:
+            continue
+    return [{"skill": s, "count": c} for s, c in counts.most_common(20)]
+
+
 @app.get("/api/history")
 async def get_search_history(user: AuthDep):
     """Return past search queries with result counts."""

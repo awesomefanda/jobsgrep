@@ -21,8 +21,10 @@
   const hotSkillsList  = $('hot-skills-list');
   const toast          = $('toast');
 
-  const historyPanel = $('history-panel');
-  const historyList  = $('history-list');
+  const historyPanel    = $('history-panel');
+  const historyList     = $('history-list');
+  const trendingPanel   = $('trending-panel');
+  const trendingList    = $('trending-skills-list');
 
   let currentTaskId  = null;
   let eventSource    = null;
@@ -65,6 +67,18 @@
     if (footerSources) {
       footerSources.textContent = sources.map(s => s.name).join(', ');
     }
+  }).catch(() => {});
+
+  // ─── Trending skills (landing page) ─────────────────────────────────────
+  fetch('/api/trending-skills').then(r => r.json()).then(skills => {
+    if (!skills || !skills.length) return;
+    const max = skills[0].count || 1;
+    trendingList.innerHTML = skills.map(item => {
+      const pct = Math.round((item.count / max) * 100);
+      return `<span class="skill-chip" title="${item.count} mentions"
+                style="--bar:${pct}%">${escHtml(item.skill)}<em>${item.count}</em></span>`;
+    }).join('');
+    trendingPanel.style.display = 'block';
   }).catch(() => {});
 
   // ─── Search history ──────────────────────────────────────────────────
@@ -120,6 +134,7 @@
     searchBtn.disabled = true;
     progressPanel.style.display = 'block';
     resultsPanel.style.display = 'none';
+    trendingPanel.style.display = 'none';
     resetProgress();
     startElapsedTimer();
 
