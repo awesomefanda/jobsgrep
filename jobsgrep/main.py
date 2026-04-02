@@ -578,8 +578,9 @@ async def download_report(task_id: str, user: AuthDep, query: str = ""):
             from .job_cache import get_scored_fuzzy
             from .report.excel import generate_report
             parsed = await parse_query(query, None)
-            scored = get_scored_fuzzy(parsed)
-            if scored:
+            cache_result = get_scored_fuzzy(parsed)
+            if cache_result:
+                scored, _ = cache_result
                 fake_task = SearchTask(task_id=task_id, query=query)
                 fake_task.status = TaskStatus.COMPLETE
                 fake_task.total_jobs_found = len(scored)
