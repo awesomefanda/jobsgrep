@@ -102,10 +102,11 @@ def _load_seed_cache() -> None:
     for src in seed_dir.glob("scored__*.json"):
         dst = scored / src.name.replace("scored__", "")
         if not dst.exists():
-            # Re-stamp stored_at to now so TTL check treats seeds as fresh
+            # Re-stamp stored_at and force source=seed so entries never expire via TTL
             try:
                 data = json.loads(src.read_text(encoding="utf-8"))
                 data["stored_at"] = now
+                data["source"] = "seed"
                 dst.write_text(json.dumps(data), encoding="utf-8")
             except Exception:
                 shutil.copy(src, dst)

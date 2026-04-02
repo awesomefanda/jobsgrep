@@ -39,6 +39,7 @@ def load_seeds():
         try:
             data = json.loads(src.read_text(encoding="utf-8"))
             data["stored_at"] = now
+            data["source"] = "seed"
             dst.write_text(json.dumps(data), encoding="utf-8")
         except Exception:
             shutil.copy(src, dst)
