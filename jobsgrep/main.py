@@ -602,6 +602,21 @@ async def download_report(task_id: str, user: AuthDep, query: str = ""):
     )
 
 
+@app.get("/favicon.ico")
+@app.get("/favicon.png")
+async def favicon():
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+        '<rect width="32" height="32" rx="6" fill="#2563eb"/>'
+        '<text x="16" y="23" font-family="monospace" font-size="20" font-weight="bold" '
+        'fill="white" text-anchor="middle">J</text>'
+        '</svg>'
+    )
+    from fastapi.responses import Response
+    return Response(content=svg, media_type="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.get("/api/sources")
 async def list_sources(user: AuthDep):
     """List enabled data sources for current mode with legal classification."""
