@@ -322,6 +322,33 @@ def get_scored_fuzzy(query: "ParsedQuery") -> "tuple[list, list] | None":
                         best_key, best_score, query.titles)
             return result
 
+    # Second pass: city query with no city-specific seed → fall back to best remote seed
+    # Useful for rare titles (e.g. Engineering Manager) that only have remote seeds.
+    if query_city_words and best_score < 2:
+        remote_best_key: str | None = None
+        remote_best_score = 0
+        for key, label in candidates:
+            try:
+                if not label or "remote" not in label.lower():
+                    continue
+                label_words = _words(label)
+                title_overlap = len(query_title_words & label_words)
+                seed_title_only = label_words - _words("remote san francisco bay area california new york austin texas seattle chicago boston")
+                false_match_penalty = len(seed_title_only - query_title_words) * 0.5
+                if title_overlap >= 1:
+                    score = title_overlap * 3 - false_match_penalty
+                    if score > remote_best_score:
+                        remote_best_score = score
+                        remote_best_key = key
+            except Exception:
+                continue
+        if remote_best_key and remote_best_score >= 2:
+            result = get_scored(remote_best_key)
+            if result is not None:
+                logger.info("fuzzy scored cache fallback to remote seed: %s (score=%d, query titles=%s)",
+                            remote_best_key, remote_best_score, query.titles)
+                return result
+
     return None
 
 
