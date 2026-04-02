@@ -455,7 +455,7 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
 async def index():
     index_html = _FRONTEND_DIR / "index.html"
     if index_html.exists():
-        return FileResponse(str(index_html))
+        return FileResponse(str(index_html), headers={"Cache-Control": "no-store"})
     return JSONResponse({"status": "JobsGrep running", "docs": "/docs"})
 
 
