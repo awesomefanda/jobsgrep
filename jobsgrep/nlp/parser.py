@@ -75,6 +75,12 @@ _LOCATION_ALIASES = {
     "chicago": "Chicago",
     "denver": "Denver",
     "atlanta": "Atlanta",
+    "san diego": "San Diego",
+    "miami": "Miami",
+    "phoenix": "Phoenix",
+    "portland": "Portland",
+    "washington dc": "Washington DC",
+    "dc": "Washington DC",
 }
 
 _TITLE_CANONICAL = [
