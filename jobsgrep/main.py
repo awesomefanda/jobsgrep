@@ -293,9 +293,10 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
             task.hot_skills = hot_skills
             await update(TaskStatus.REPORTING, "Building report from pre-scored results...")
             task.completed_at = datetime.now(timezone.utc)
-            from .report.excel import generate_report
-            report_path = generate_report(pre_scored, task, _REPORTS_DIR)
-            task.download_url = _download_url()
+            if pre_scored:
+                from .report.excel import generate_report
+                report_path = generate_report(pre_scored, task, _REPORTS_DIR)
+                task.download_url = _download_url()
 
             from .history import record_search
             record_search(query, task.total_jobs_found, len(pre_scored), task.sources_searched)
@@ -329,16 +330,17 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
 
             await update(TaskStatus.REPORTING, "Generating Excel report...")
             task.completed_at = datetime.now(timezone.utc)
-            from .report.excel import generate_report
-            report_path = generate_report(scored, task, _REPORTS_DIR)
-            task.download_url = _download_url()
+            if scored:
+                from .report.excel import generate_report
+                report_path = generate_report(scored, task, _REPORTS_DIR)
+                task.download_url = _download_url()
+                _tasks[task_id]._report_path = str(report_path)  # type: ignore[attr-defined]
 
             from .history import record_search
             record_search(query, task.total_jobs_found, len(scored), task.sources_searched)
 
             task.status = TaskStatus.COMPLETE
             task.progress_message = f"Done! Found {len(scored)} matching jobs."
-            _tasks[task_id]._report_path = str(report_path)  # type: ignore[attr-defined]
             return
 
         # ── Phase 1c: live search (cache miss) ────────────────────────────────
@@ -427,20 +429,20 @@ async def _run_search(task_id: str, query: str, resume_text: str | None) -> None
             _store_scored(_ck, scored, source="live_search", label=query)
         task.hot_skills = _compute_hot_skills_from_jobs(scored)
 
-        # Phase 3: generate report
+        # Phase 3: generate report (only if there are results)
         await update(TaskStatus.REPORTING, "Generating Excel report...")
         task.completed_at = datetime.now(timezone.utc)
-        report_path = generate_report(scored, task, _REPORTS_DIR)
-        task.download_url = f"/api/download/{task_id}"
+        if scored:
+            report_path = generate_report(scored, task, _REPORTS_DIR)
+            task.download_url = f"/api/download/{task_id}"
+            _tasks[task_id]._report_path = str(report_path)  # type: ignore[attr-defined]
 
         # Record in search history
         from .history import record_search
         record_search(query, task.total_jobs_found, len(scored), task.sources_searched)
 
-        # Store path for download
         task.status = TaskStatus.COMPLETE
         task.progress_message = f"Done! Found {len(scored)} matching jobs."
-        _tasks[task_id]._report_path = str(report_path)  # type: ignore[attr-defined]
 
     except Exception as e:
         logger.exception("search task %s failed", task_id)

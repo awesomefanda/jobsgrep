@@ -255,8 +255,8 @@
     resultsSummary.textContent =
       `Found ${data.scored_jobs} matching jobs from ${data.total_jobs} total`;
 
-    // Download button
-    if (data.download_url) {
+    // Download button — only show when there are actual results
+    if (data.download_url && data.scored_jobs > 0) {
       downloadBtn.href = data.download_url;
       downloadBtn.style.display = 'inline-flex';
     }
@@ -285,7 +285,16 @@
   }
 
   function renderPreview(data) {
-    // Since we don't have a JSON preview endpoint, show summary stats
+    const hasJobs = data.scored_jobs > 0;
+    const downloadLink = hasJobs && data.download_url
+      ? `<div style="margin-top:1rem">
+           <a href="${data.download_url}" class="download-btn" download>
+             ⬇ Download Excel Report
+           </a>
+         </div>`
+      : `<div style="font-size:0.88rem; color:var(--muted); margin-top:0.5rem;">
+           No matching jobs found. Try broadening your search.
+         </div>`;
     jobsBody.innerHTML = `
       <tr>
         <td colspan="5" style="text-align:center; padding: 2rem; color: var(--muted);">
@@ -295,11 +304,7 @@
           <div style="font-size:0.88rem;">
             Sources: ${(data.sources_searched || []).join(', ')}
           </div>
-          <div style="margin-top:1rem">
-            <a href="${data.download_url}" class="download-btn" download>
-              ⬇ Download Excel Report
-            </a>
-          </div>
+          ${downloadLink}
         </td>
       </tr>`;
   }
